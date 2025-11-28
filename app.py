@@ -2,9 +2,13 @@ from flask import Flask, render_template, request
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 import numpy as np
+import os
 
 from db import init_db, db
 from models import Candidate, Job, Match
+
+# Disable tokenizer parallelism warnings and reduce overhead
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # -------------------------
 # CONFIG & MODEL LOADING
@@ -15,8 +19,9 @@ init_db(app)
 with app.app_context():
     db.create_all()
 
-# Load embedding model (you can change to any sentence-transformers model)
-model = SentenceTransformer("all-MiniLM-L6-v2")
+# Use a lighter model to fit in 512MB RAM on free hosting
+# (still good quality for semantic similarity)
+model = SentenceTransformer("sentence-transformers/paraphrase-MiniLM-L3-v2")
 
 # A simple global skill vocabulary – extend this as needed
 SKILL_VOCAB = [
@@ -53,7 +58,7 @@ SKILL_VOCAB = [
 # -------------------------
 def embed(text: str) -> np.ndarray:
     if not text:
-        # embedding size for all-MiniLM-L6-v2 is 384
+        # embedding size for MiniLM models is 384
         return np.zeros((1, 384))
     emb = model.encode([text])
     return np.array(emb)
@@ -153,6 +158,10 @@ def index():
     return render_template("index.html", result=result, matches=matches)
 
 
-# VERY IMPORTANT: this part actually runs the server
+# -------------------------
+# ENTRY POINT
+# -------------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    # For Render / other PaaS: use PORT env, bind to 0.0.0.0
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
