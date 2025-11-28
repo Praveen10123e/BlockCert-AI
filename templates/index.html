@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>BlockCert – AI Resume & Job Match</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="page">
+    <h1>BlockCert – AI-Powered Smart Resume & Job Match Engine</h1>
+
+    <div class="grid">
+        <!-- Candidate / Student panel -->
+        <section class="card">
+            <h2>Candidate View – Check Your True Match</h2>
+            <form method="POST">
+                <input type="hidden" name="role" value="candidate" />
+
+                <label>Name</label>
+                <input type="text" name="candidate_name" placeholder="Your name" />
+
+                <label>Email</label>
+                <input type="email" name="candidate_email" placeholder="you@example.com" />
+
+                <label>Your Resume / Profile (paste text)</label>
+                <textarea name="resume_text" rows="8"
+                          placeholder="Paste your resume, projects, internships, etc."></textarea>
+
+                <label>Job Description</label>
+                <textarea name="job_text" rows="6"
+                          placeholder="Paste the job description here"></textarea>
+
+                <button type="submit">Analyze Match</button>
+            </form>
+
+            {% if result %}
+            <div class="result">
+                <h3>True Match Score: {{ result.match_score }}%</h3>
+
+                <p><strong>Your Skills Detected:</strong>
+                    {% if result.cand_skills %} {{ result.cand_skills|join(", ") }}
+                    {% else %}No skills detected from vocabulary.{% endif %}
+                </p>
+
+                <p><strong>Skills Required (from JD):</strong>
+                    {% if result.job_skills %} {{ result.job_skills|join(", ") }}
+                    {% else %}No skills detected from vocabulary.{% endif %}
+                </p>
+
+                <p><strong>Skill Gap – Recommended to Learn:</strong>
+                    {% if result.missing_skills %} {{ result.missing_skills|join(", ") }}
+                    {% else %}Great! You cover all detected skills.{% endif %}
+                </p>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- Recruiter panel -->
+        <section class="card">
+            <h2>Recruiter View – Ranked Candidates (True Match Score)</h2>
+            {% if matches %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Candidate</th>
+                        <th>Email</th>
+                        <th>Match Score</th>
+                        <th>Missing Skills</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for m in matches %}
+                    <tr>
+                        <td>{{ m.candidate.name }}</td>
+                        <td>{{ m.candidate.email }}</td>
+                        <td>{{ m.match_score }}%</td>
+                        <td>{{ m.missing_skills }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>No matches yet – submit the form to generate some!</p>
+            {% endif %}
+        </section>
+    </div>
+
+    <footer>
+        Team CODEZILLA – Hack-to-Hire “BlockCert”
+    </footer>
+</div>
+</body>
+</html>
