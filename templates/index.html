@@ -1,93 +1,138 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>BlockCert – AI Resume & Job Match</title>
+    <meta charset="UTF-8">
+    <title>BlockCert AI – True Match</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<div class="page">
-    <h1>BlockCert – AI-Powered Smart Resume & Job Match Engine</h1>
+<div class="container">
 
-    <div class="grid">
-        <!-- Candidate / Student panel -->
-        <section class="card">
-            <h2>Candidate View – Check Your True Match</h2>
-            <form method="POST">
-                <input type="hidden" name="role" value="candidate" />
+    <!-- LEFT : CANDIDATE VIEW -->
+    <div class="card">
+        <h2>Candidate View – Check Your True Match</h2>
 
-                <label>Name</label>
-                <input type="text" name="candidate_name" placeholder="Your name" />
+        <form method="POST" enctype="multipart/form-data">
+            <!-- Name -->
+            <label>Name</label>
+            <input
+                type="text"
+                name="candidate_name"
+                placeholder="Your name"
+                value="{{ request.form.candidate_name or '' }}"
+            >
 
-                <label>Email</label>
-                <input type="email" name="candidate_email" placeholder="you@example.com" />
+            <!-- Email -->
+            <label>Email</label>
+            <input
+                type="email"
+                name="candidate_email"
+                placeholder="you@example.com"
+                value="{{ request.form.candidate_email or '' }}"
+            >
 
-                <label>Your Resume / Profile (paste text)</label>
-                <textarea name="resume_text" rows="8"
-                          placeholder="Paste your resume, projects, internships, etc."></textarea>
+            <!-- Upload PDF ONLY -->
+            <label>Upload Resume (PDF)</label>
+            <input
+                type="file"
+                name="resume_pdf"
+                accept="application/pdf"
+            />
 
-                <label>Job Description</label>
-                <textarea name="job_text" rows="6"
-                          placeholder="Paste the job description here"></textarea>
+            <p style="font-size: 12px; color:#9ca3af; margin:6px 0 12px;">
+                Upload your resume as a PDF. The system will read the text and
+                compute your match score automatically.
+            </p>
 
-                <button type="submit">Analyze Match</button>
-            </form>
+            <!-- Job description -->
+            <label>Job Description</label>
+            <textarea
+                name="job_text"
+                placeholder="Paste the job description here"
+            >{{ request.form.job_text or '' }}</textarea>
 
-            {% if result %}
-            <div class="result">
-                <h3>True Match Score: {{ result.match_score }}%</h3>
+            <button type="submit">Analyze Match</button>
+        </form>
 
-                <p><strong>Your Skills Detected:</strong>
-                    {% if result.cand_skills %} {{ result.cand_skills|join(", ") }}
-                    {% else %}No skills detected from vocabulary.{% endif %}
-                </p>
+        <hr>
 
-                <p><strong>Skills Required (from JD):</strong>
-                    {% if result.job_skills %} {{ result.job_skills|join(", ") }}
-                    {% else %}No skills detected from vocabulary.{% endif %}
-                </p>
+        {% if error_message %}
+            <p style="color:#f97373; font-size:14px; margin-top:8px;">
+                {{ error_message }}
+            </p>
+        {% endif %}
 
-                <p><strong>Skill Gap – Recommended to Learn:</strong>
-                    {% if result.missing_skills %} {{ result.missing_skills|join(", ") }}
-                    {% else %}Great! You cover all detected skills.{% endif %}
-                </p>
-            </div>
-            {% endif %}
-        </section>
+        {% if result %}
+            <h3>True Match Score: {{ result.match_score }}%</h3>
 
-        <!-- Recruiter panel -->
-        <section class="card">
-            <h2>Recruiter View – Ranked Candidates (True Match Score)</h2>
-            {% if matches %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Candidate</th>
-                        <th>Email</th>
-                        <th>Match Score</th>
-                        <th>Missing Skills</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for m in matches %}
-                    <tr>
-                        <td>{{ m.candidate.name }}</td>
-                        <td>{{ m.candidate.email }}</td>
-                        <td>{{ m.match_score }}%</td>
-                        <td>{{ m.missing_skills }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <p>No matches yet – submit the form to generate some!</p>
-            {% endif %}
-        </section>
+            <p>
+                <strong>Your Skills Detected:</strong>
+                {% if result.cand_skills %}
+                    {{ result.cand_skills | join(", ") }}
+                {% else %}
+                    No skills detected from résumé.
+                {% endif %}
+            </p>
+
+            <p>
+                <strong>Skills Required (from JD):</strong>
+                {% if result.job_skills %}
+                    {{ result.job_skills | join(", ") }}
+                {% else %}
+                    No skills detected from job description.
+                {% endif %}
+            </p>
+
+            <p>
+                <strong>Skill Gap – Recommended to Learn:</strong>
+                {% if result.missing_skills %}
+                    {{ result.missing_skills | join(", ") }}
+                {% else %}
+                    Great! You cover all detected skills.
+                {% endif %}
+            </p>
+        {% else %}
+            <p style="margin-top: 10px; font-size: 14px; color:#9ca3af;">
+                Upload your resume PDF and paste a job description to see
+                your true fit score and skill gap.
+            </p>
+        {% endif %}
     </div>
 
-    <footer>
-        Team CODEZILLA – Hack-to-Hire “BlockCert”
-    </footer>
+    <!-- RIGHT : RECRUITER VIEW -->
+    <div class="card">
+        <h2>Recruiter View – Ranked Candidates (True Match Score)</h2>
+
+        <table>
+            <thead>
+            <tr>
+                <th>Candidate</th>
+                <th>Email</th>
+                <th>Match Score</th>
+                <th>Missing Skills</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% if matches %}
+                {% for m in matches %}
+                    <tr>
+                        <td>{{ m.candidate.name if m.candidate else "N/A" }}</td>
+                        <td>{{ m.candidate.email if m.candidate else "N/A" }}</td>
+                        <td>{{ "%.2f"|format(m.match_score) }}%</td>
+                        <td>{{ m.missing_skills or "-" }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="4" style="font-size:14px; color:#9ca3af;">
+                        No candidates analyzed yet.
+                    </td>
+                </tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+
 </div>
 </body>
 </html>

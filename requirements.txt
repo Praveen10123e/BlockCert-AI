@@ -1,8 +1,7 @@
 flask
 flask_sqlalchemy
-psycopg2-binary
+sqlalchemy
 sentence-transformers
 scikit-learn
-sqlalchemy
-gunicorn
 python-dotenv
+PyPDF2

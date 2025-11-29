@@ -2,13 +2,10 @@ from flask import Flask, render_template, request
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 import numpy as np
-import os
+from PyPDF2 import PdfReader
 
 from db import init_db, db
 from models import Candidate, Job, Match
-
-# Disable tokenizer parallelism warnings and reduce overhead
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # -------------------------
 # CONFIG & MODEL LOADING
@@ -19,9 +16,8 @@ init_db(app)
 with app.app_context():
     db.create_all()
 
-# Use a lighter model to fit in 512MB RAM on free hosting
-# (still good quality for semantic similarity)
-model = SentenceTransformer("sentence-transformers/paraphrase-MiniLM-L3-v2")
+# Use a MiniLM model for semantic similarity
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # A simple global skill vocabulary – extend this as needed
 SKILL_VOCAB = [
@@ -56,6 +52,20 @@ SKILL_VOCAB = [
 # -------------------------
 # HELPER FUNCTIONS
 # -------------------------
+def extract_text_from_pdf(file_stream) -> str:
+    """Extract plain text from an uploaded PDF file."""
+    try:
+        reader = PdfReader(file_stream)
+        text = ""
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            text += "\n" + page_text
+        return text.strip()
+    except Exception as e:
+        print("PDF read error:", e)
+        return ""
+
+
 def embed(text: str) -> np.ndarray:
     if not text:
         # embedding size for MiniLM models is 384
@@ -97,56 +107,71 @@ def compute_skill_gap(candidate_skills, job_skills):
 @app.route("/", methods=["GET", "POST"])
 def index():
     result = None
+    error_message = None
 
     if request.method == "POST":
-        resume_text = request.form.get("resume_text", "")
-        job_text = request.form.get("job_text", "")
         candidate_name = request.form.get("candidate_name", "Anonymous")
         candidate_email = request.form.get("candidate_email", "")
+        job_text = request.form.get("job_text", "").strip()
 
-        # 1. Extract skills
-        cand_skills = extract_skills(resume_text)
-        job_skills = extract_skills(job_text)
+        # --- PDF upload is REQUIRED for resume ---
+        pdf_file = request.files.get("resume_pdf")
+        resume_text = ""
 
-        # 2. Semantic similarity
-        match_score = compute_match_score(resume_text, job_text)
+        if pdf_file and pdf_file.filename:
+            if pdf_file.mimetype == "application/pdf":
+                resume_text = extract_text_from_pdf(pdf_file.stream)
+                if not resume_text:
+                    error_message = "Could not read text from the uploaded PDF."
+            else:
+                error_message = "Please upload a valid PDF file for the resume."
+        else:
+            error_message = "Please upload your resume as a PDF file."
 
-        # 3. Skill gap
-        missing_skills = compute_skill_gap(cand_skills, job_skills)
+        if not error_message:
+            # 1. Extract skills
+            cand_skills = extract_skills(resume_text)
+            job_skills = extract_skills(job_text)
 
-        # 4. Store in DB
-        candidate = Candidate(
-            name=candidate_name,
-            email=candidate_email,
-            resume_text=resume_text,
-            skills=",".join(cand_skills),
-        )
-        job = Job(
-            title="Hackathon Job Role",
-            description=job_text,
-            skills_required=",".join(job_skills),
-        )
-        db.session.add(candidate)
-        db.session.add(job)
-        db.session.commit()
+            # 2. Semantic similarity
+            match_score = compute_match_score(resume_text, job_text)
 
-        m = Match(
-            candidate_id=candidate.id,
-            job_id=job.id,
-            match_score=match_score,
-            missing_skills=",".join(missing_skills),
-        )
-        db.session.add(m)
-        db.session.commit()
+            # 3. Skill gap
+            missing_skills = compute_skill_gap(cand_skills, job_skills)
 
-        result = {
-            "match_score": match_score,
-            "cand_skills": cand_skills,
-            "job_skills": job_skills,
-            "missing_skills": missing_skills,
-            "candidate": candidate,
-            "job": job,
-        }
+            # 4. Store in DB
+            candidate = Candidate(
+                name=candidate_name,
+                email=candidate_email,
+                resume_text=resume_text,
+                skills=",".join(cand_skills),
+            )
+            job = Job(
+                title="Hackathon Job Role",
+                description=job_text,
+                skills_required=",".join(job_skills),
+            )
+            db.session.add(candidate)
+            db.session.add(job)
+            db.session.commit()
+
+            m = Match(
+                candidate_id=candidate.id,
+                job_id=job.id,
+                match_score=match_score,
+                missing_skills=",".join(missing_skills),
+            )
+            db.session.add(m)
+            db.session.commit()
+
+            result = {
+                "match_score": match_score,
+                "cand_skills": cand_skills,
+                "job_skills": job_skills,
+                "missing_skills": missing_skills,
+                "candidate": candidate,
+                "job": job,
+            }
 
     # For recruiter view – show top candidates
     matches = (
@@ -155,13 +180,8 @@ def index():
         .all()
     )
 
-    return render_template("index.html", result=result, matches=matches)
+    return render_template("index.html", result=result, matches=matches, error_message=error_message)
 
 
-# -------------------------
-# ENTRY POINT
-# -------------------------
 if __name__ == "__main__":
-    # For Render / other PaaS: use PORT env, bind to 0.0.0.0
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(debug=True)
